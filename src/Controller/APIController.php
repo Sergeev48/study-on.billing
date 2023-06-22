@@ -5,8 +5,6 @@ namespace App\Controller;
 use App\DTO\UserDto;
 use App\Entity\User;
 use App\Repository\UserRepository;
-use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\Persistence\ManagerRegistry;
 use JMS\Serializer\Serializer;
 use JMS\Serializer\SerializerBuilder;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
@@ -16,8 +14,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
-use Symfony\Component\Security\Core\Security;
 use OpenApi\Attributes as OA;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
@@ -45,7 +41,6 @@ class APIController extends AbstractController
         description: "Входные данные - email и пароль.\nВыходные данные - JSON с JWT-токеном в случае успеха, JSON с ошибками в случае возникновения ошибок",
         summary: "Авторизация пользователя"
     )]
-
     #[OA\RequestBody (
         required: true,
         content: new OA\JsonContent(
@@ -56,7 +51,6 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Response(
         response: 201,
         description: 'Успешная авторизация',
@@ -67,7 +61,6 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Response(
         response: 401,
         description: 'Неправильные данные',
@@ -79,7 +72,6 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Response(
         response: 500,
         description: 'Неизвестная ошибка',
@@ -91,13 +83,11 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Parameter (
         name: 'body',
         description: 'JSON Payload',
         in: 'query',
     )]
-
     #[OA\Tag(
         name: "User"
     )]
@@ -106,12 +96,12 @@ class APIController extends AbstractController
     {
 
     }
+
     #[OA\Post (
         path: '/api/v1/register',
         description: "Входные данные - email и пароль.\nВыходные данные - JSON с JWT-токеном, роли пользователя и его баланс в случае успеха, JSON с ошибками в случае возникновения ошибок",
         summary: "Регистрация пользователя"
     )]
-
     #[OA\RequestBody (
         required: true,
         content: new OA\JsonContent(
@@ -122,7 +112,6 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Response(
         response: 201,
         description: 'Успешная регистрация',
@@ -134,7 +123,6 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Response(
         response: 401,
         description: 'Регистрация с неправильными данными',
@@ -147,7 +135,6 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Response(
         response: 500,
         description: 'Неизвестная ошибка',
@@ -159,13 +146,11 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Parameter (
         name: 'body',
         description: 'JSON Payload',
         in: 'query',
     )]
-
     #[OA\Tag(
         name: "User"
     )]
@@ -206,7 +191,6 @@ class APIController extends AbstractController
         description: "Входные данные - JWT-токен.\nВыходные данные - электронная почта, роли пользователя и его баланс в случае успеха, JSON с ошибками в случае возникновения ошибок",
         summary: "Получение текущего пользователя"
     )]
-
     #[OA\Response(
         response: 201,
         description: 'Успешное получение пользователя',
@@ -220,7 +204,6 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Response(
         response: 401,
         description: 'Ввод неправильного JWT-токена',
@@ -232,7 +215,6 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Response(
         response: 500,
         description: 'Неизвестная ошибка',
@@ -244,13 +226,11 @@ class APIController extends AbstractController
             type: 'object'
         )
     )]
-
     #[OA\Parameter (
         name: 'body',
         description: 'JSON Payload',
         in: 'query',
     )]
-
     #[OA\Tag(
         name: "User"
     )]
