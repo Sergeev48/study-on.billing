@@ -17,9 +17,9 @@ abstract class AbstractTest extends WebTestCase
     /** @var Client */
     protected static $client;
 
-    protected static function getClient($reinitialize = false, array $options = [], array $server = [])
+    protected static function getClient($newClient = false, array $options = [], array $server = [])
     {
-        if (!static::$client || $reinitialize) {
+        if (!static::$client || $newClient) {
             static::$client = static::createClient($options, $server);
         }
 

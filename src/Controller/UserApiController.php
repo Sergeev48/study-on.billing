@@ -16,9 +16,11 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Annotation\Route;
 use OpenApi\Attributes as OA;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Gesdinet\JWTRefreshTokenBundle\Generator\RefreshTokenGeneratorInterface;
+use Gesdinet\JWTRefreshTokenBundle\Model\RefreshTokenManagerInterface;
 
 #[Route('/api/v1')]
-class APIController extends AbstractController
+class UserApiController extends AbstractController
 {
     private ValidatorInterface $validator;
 
@@ -26,19 +28,26 @@ class APIController extends AbstractController
 
     private UserPasswordHasherInterface $hasher;
 
+    private RefreshTokenGeneratorInterface $refreshTokenGenerator;
+    private RefreshTokenManagerInterface $refreshTokenManager;
+
     public function __construct(
         ValidatorInterface          $validator,
-        UserPasswordHasherInterface $hasher
+        UserPasswordHasherInterface $hasher,
+        RefreshTokenGeneratorInterface $refreshTokenGenerator,
+        RefreshTokenManagerInterface $refreshTokenManager
     )
     {
         $this->validator = $validator;
         $this->serializer = SerializerBuilder::create()->build();
         $this->hasher = $hasher;
+        $this->refreshTokenGenerator = $refreshTokenGenerator;
+        $this->refreshTokenManager = $refreshTokenManager;
     }
 
     #[OA\Post (
         path: '/api/v1/auth',
-        description: "Входные данные - email и пароль.\nВыходные данные - JSON с JWT-токеном в случае успеха, JSON с ошибками в случае возникновения ошибок",
+        description: "Входные данные - email и пароль.\nВыходные данные - JSON с JWT и refresh токеном в случае успеха, JSON с ошибками в случае возникновения ошибок",
         summary: "Авторизация пользователя"
     )]
     #[OA\RequestBody (
@@ -56,7 +65,9 @@ class APIController extends AbstractController
         description: 'Успешная авторизация',
         content: new OA\JsonContent(
             properties: [
-                new OA\Property(property: 'token', type: 'string')
+                new OA\Property(property: 'token', type: 'string'),
+                new OA\Property(property: 'refresh_token', type: 'string')
+
             ],
             type: 'object'
         )
@@ -118,7 +129,9 @@ class APIController extends AbstractController
         content: new OA\JsonContent(
             properties: [
                 new OA\Property(property: 'token', type: 'string'),
-                new OA\Property(property: 'ROLES', type: 'array', items: new OA\Items(type: "string"))
+                new OA\Property(property: 'ROLES', type: 'array', items: new OA\Items(type: "string")),
+                new OA\Property(property: 'balance', type: 'integer', example: 0),
+                new OA\Property(property: 'refresh_token', type: 'string')
             ],
             type: 'object'
         )
@@ -180,9 +193,16 @@ class APIController extends AbstractController
             $this->hasher->hashPassword($user, $user->getPassword())
         );
         $repo->save($user, true);
+        $refreshToken = $this->refreshTokenGenerator->createForUserWithTtl(
+            $user,
+            (new \DateTime())->modify('+1 month')->getTimestamp()
+        );
+        $this->refreshTokenManager->save($refreshToken);
         return new JsonResponse([
             'token' => $jwtManager->create($user),
             'roles' => $user->getRoles(),
+            'balance' => $user->getBalance(),
+            'refresh_token' => $refreshToken->getRefreshToken()
         ], Response::HTTP_CREATED);
     }
 
@@ -244,6 +264,70 @@ class APIController extends AbstractController
             'roles' => $this->getUser()->getRoles(),
             'balance' => $this->getUser()->getBalance(),
         ], Response::HTTP_OK);
+    }
+
+    #[Route('/token/refresh', name: 'api_refresh', methods: ['POST'])]
+
+    #[OA\Post(
+        path: '/api/v1/token/refresh',
+        description: "Входные данные - refresh-токен.
+        \nВыходные данные - JSON с JWT-токеном и refresh-токеном в случае успеха, 
+        JSON с ошибками в случае возникновения ошибок",
+        summary: "Обновление JWT-токена"
+    )]
+
+    #[OA\RequestBody(
+        required: true,
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'refresh_token', type: 'string'),
+            ],
+            type: 'object'
+        )
+    )]
+
+    #[OA\Response(
+        response: 201,
+        description: 'Успешное получение токена.',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'token', type: 'string'),
+                new OA\Property(property: 'refresh_token', type: 'string')
+            ],
+            type: 'object'
+        )
+    )]
+
+    #[OA\Response(
+        response: 401,
+        description: 'Ошибка в refresh-токене.',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'code', type: 'string', example: 401),
+                new OA\Property(property: 'message', type: 'string', example: 'JWT Refresh Token Not Found')
+            ],
+            type: 'object'
+        )
+    )]
+
+    #[OA\Response(
+        response: 500,
+        description: 'Неизвестная ошибка',
+        content: new OA\JsonContent(
+            properties: [
+                new OA\Property(property: 'code', type: 'string'),
+                new OA\Property(property: 'message', type: 'string')
+            ],
+            type: 'object'
+        )
+    )]
+
+    #[OA\Tag(
+        name: "User"
+    )]
+
+    public function refresh(): void
+    {
     }
 
 
