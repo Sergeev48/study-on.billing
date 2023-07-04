@@ -2,10 +2,12 @@
 
 namespace App\Repository;
 
+use App\Entity\Course;
 use App\Entity\Transaction;
 use App\Entity\User;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use DateTime;
 
 /**
  * @extends ServiceEntityRepository<Transaction>
@@ -64,6 +66,33 @@ class TransactionRepository extends ServiceEntityRepository
                 ->setParameter('now', new \DateTime('now'));
         }
         return $qb
+            ->orderBy('t.createdAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function findExpiringTransactions(User $user)
+    {
+        return $this->createQueryBuilder('t')
+            ->andWhere('t.client = :user')
+            ->setParameter('user', $user->getId())
+            ->andWhere('t.expiresAt > :now OR t.expiresAt is null')
+            ->setParameter('now', new \DateTime('now'))
+            ->andWhere('t.expiresAt < :tomorrow')
+            ->setParameter('tomorrow', (new DateTime('now'))->modify("+1 days"))
+            ->orderBy('t.createdAt', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function findTransactionsForReport(Course $course)
+    {
+        return $this->createQueryBuilder('t')
+            ->andWhere('t.createdAt > :monthAgo')
+            ->setParameter('monthAgo', (new DateTime('now'))->modify("-30 days"))
+            ->innerJoin('t.course', 'c', 'WITH', 'c.id = t.course')
+            ->andWhere('c.id = :id')
+            ->setParameter('id', $course)
             ->orderBy('t.createdAt', 'DESC')
             ->getQuery()
             ->getResult();

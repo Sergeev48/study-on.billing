@@ -5,9 +5,12 @@ namespace App\Controller;
 use App\DTO\UserDto;
 use App\Entity\User;
 use App\Repository\UserRepository;
+use App\Service\ControllerValidator;
+use App\Service\PaymentService;
 use JMS\Serializer\Serializer;
 use JMS\Serializer\SerializerBuilder;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
+use Nelmio\ApiDocBundle\Annotation\Security;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -23,19 +26,20 @@ use Gesdinet\JWTRefreshTokenBundle\Model\RefreshTokenManagerInterface;
 class UserApiController extends AbstractController
 {
     private ValidatorInterface $validator;
-
     private Serializer $serializer;
-
     private UserPasswordHasherInterface $hasher;
-
     private RefreshTokenGeneratorInterface $refreshTokenGenerator;
     private RefreshTokenManagerInterface $refreshTokenManager;
+    private ControllerValidator $controllerValidator;
+    private PaymentService $paymentService;
 
     public function __construct(
         ValidatorInterface          $validator,
         UserPasswordHasherInterface $hasher,
         RefreshTokenGeneratorInterface $refreshTokenGenerator,
-        RefreshTokenManagerInterface $refreshTokenManager
+        RefreshTokenManagerInterface $refreshTokenManager,
+        ControllerValidator $controllerValidator,
+        PaymentService $paymentService
     )
     {
         $this->validator = $validator;
@@ -43,6 +47,11 @@ class UserApiController extends AbstractController
         $this->hasher = $hasher;
         $this->refreshTokenGenerator = $refreshTokenGenerator;
         $this->refreshTokenManager = $refreshTokenManager;
+        $this->controllerValidator = $controllerValidator;
+        $this->paymentService = $paymentService;
+
+
+
     }
 
     #[OA\Post (
@@ -175,20 +184,19 @@ class UserApiController extends AbstractController
     ): JsonResponse
     {
         $dto = $this->serializer->deserialize($req->getContent(), UserDTO::class, 'json');
-        $errs = $this->validator->validate($dto);
+        $errors = $this->validator->validate($dto);
 
-        if (count($errs) > 0) {
-            $jsonErrors = [];
-            foreach ($errs as $error) {
-                $jsonErrors[$error->getPropertyPath()] = $error->getMessage();
-            }
-            return new JsonResponse(['error' => $jsonErrors], Response::HTTP_BAD_REQUEST);
+        $dataErrorResponse = $this->controllerValidator->validateDto($errors);
+        if ($dataErrorResponse !== null) {
+            return $dataErrorResponse;
         }
-
-        if ($repo->findOneBy(['email' => $dto->username])) {
-            return new JsonResponse(['error' => 'Email уже используется.'], Response::HTTP_CONFLICT);
+        $user = $repo->findOneBy(['email' => $dto->username]);
+        $uniqueErrorResponse = $this->controllerValidator->validateRegistrationUnique($user);
+        if ($uniqueErrorResponse !== null) {
+            return $uniqueErrorResponse;
         }
         $user = User::formDTO($dto);
+        $this->paymentService->deposit($user, $_ENV['CLIENT_MONEY']);
         $user->setPassword(
             $this->hasher->hashPassword($user, $user->getPassword())
         );
@@ -255,9 +263,13 @@ class UserApiController extends AbstractController
         name: "User"
     )]
     #[Route('/users/current', name: 'api_current', methods: ['GET'])]
-    #[\Nelmio\ApiDocBundle\Annotation\Security(name: 'Bearer')]
-    public function currentUser(): JsonResponse
+    #[Security(name: "Bearer")]
+    public function getCurrentUser(): JsonResponse
     {
+        $errorResponse = $this->controllerValidator->validateGetCurrentUser($this->getUser());
+        if ($errorResponse !== null) {
+            return $errorResponse;
+        }
         return new JsonResponse([
             'code' => 200,
             'username' => $this->getUser()->getEmail(),

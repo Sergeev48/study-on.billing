@@ -11,28 +11,16 @@ use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\Common\DataFixtures\FixtureInterface;
 use DateInterval;
 use DateTimeImmutable;
+use Doctrine\Common\DataFixtures\OrderedFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
 
 
-class CourseAndTransactionFixtures extends Fixture implements DependentFixtureInterface
+class CourseAndTransactionFixtures extends Fixture implements OrderedFixtureInterface
 {
 
-    /**
-     * @return list<class-string<FixtureInterface>>
-     */
-    public function getDependencies(): array
+    public function getOrder(): int
     {
-        return [UserFixtures::class];
-    }
-
-    private UserRepository $userRepository;
-
-    /**
-     * @param UserRepository $userRepository
-     */
-    public function __construct(UserRepository $userRepository)
-    {
-        $this->userRepository = $userRepository;
+        return 2;
     }
 
     public function load(ObjectManager $manager): void
@@ -41,16 +29,20 @@ class CourseAndTransactionFixtures extends Fixture implements DependentFixtureIn
         $course1 = new Course();
         $course1->setType(0);
         $course1->setCode('Python-1');
+        $course1->setTitle('Python с нуля');
+
 
         $course2 = new Course();
         $course2->setType(1);
         $course2->setCode('Java-1');
         $course2->setPrice(2000);
+        $course2->setTitle('Java-разработчик');
 
         $course3 = new Course();
         $course3->setType(2);
         $course3->setCode('SQL-1');
         $course3->setPrice(25000);
+        $course3->setTitle('SQL-разработчик');
 
         $manager->persist($course1);
         $manager->persist($course2);
@@ -59,24 +51,35 @@ class CourseAndTransactionFixtures extends Fixture implements DependentFixtureIn
         $manager->flush();
 
         $admin = $manager->getRepository(User::class)->findOneBy(['email' => 'admin@gmail.com']);
-        $user = $manager->getRepository(User::class)->findOneBy(['email' => 'user@gmail.com']);
 
-        $currentDate = new DateTimeImmutable('now');
+        $year = 2023;
+        $month = 2;
+        $day = 16;
+        $hour = 7;
+        $minute = 24;
+        $second = 10;
+
+        $oldDate =(new DateTimeImmutable)
+            ->setTime($hour, $minute, $second)
+            ->setDate($year, $month, $day);
 
         $transaction1 = new Transaction();
-        $transaction1->setCourse($course1);
-        $transaction1->setClient($user);
+        $transaction1->setCourse($course2);
+        $transaction1->setClient($admin);
         $transaction1->setType(0);
-        $transaction1->setAmount(0);
-        $transaction1->setCreatedAt($currentDate->add(new DateInterval('P2D')));
+        $transaction1->setAmount($course2->getPrice());
+        $transaction1->setCreatedAt($oldDate);
+        $transaction1->setExpiresAt($oldDate->add(new DateInterval('P7D')));
+
+        $currentDate = new DateTimeImmutable('now');
 
         $transaction2 = new Transaction();
         $transaction2->setCourse($course2);
         $transaction2->setClient($admin);
         $transaction2->setType(0);
         $transaction2->setAmount($course2->getPrice());
-        $transaction2->setCreatedAt($currentDate->add(new DateInterval('P1D')));
-        $transaction2->setExpiresAt($currentDate->add(new DateInterval('P8D')));
+        $transaction2->setCreatedAt($currentDate);
+        $transaction2->setExpiresAt($currentDate->add(new DateInterval('P1D')));
 
         $transaction3 = new Transaction();
         $transaction3->setCourse($course3);
@@ -91,30 +94,10 @@ class CourseAndTransactionFixtures extends Fixture implements DependentFixtureIn
         $transaction4->setAmount(50000);
         $transaction4->setCreatedAt($currentDate);
 
-        $year = 2023;
-        $month = 2;
-        $day = 16;
-        $hour = 7;
-        $minute = 24;
-        $second = 10;
-
-        $oldDate =(new DateTimeImmutable)
-            ->setTime($hour, $minute, $second)
-            ->setDate($year, $month, $day);
-
-        $transaction5 = new Transaction();
-        $transaction5->setCourse($course2);
-        $transaction5->setClient($admin);
-        $transaction5->setType(0);
-        $transaction5->setAmount($course2->getPrice());
-        $transaction5->setCreatedAt($oldDate);
-        $transaction5->setExpiresAt($oldDate->add(new DateInterval('P8D')));
-
         $manager->persist($transaction1);
         $manager->persist($transaction2);
         $manager->persist($transaction3);
         $manager->persist($transaction4);
-        $manager->persist($transaction5);
 
         $manager->flush();
     }
