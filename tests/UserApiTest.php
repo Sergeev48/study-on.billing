@@ -1,7 +1,13 @@
 <?php
+
 namespace App\Tests;
 
-use App\DataFixtures\AppFixtures;
+use App\DataFixtures\UserFixtures;
+use App\DataFixtures\CourseAndTransactionFixtures;
+use App\Service\PaymentService;
+use App\Tests\AbstractTest;
+use Gesdinet\JWTRefreshTokenBundle\Generator\RefreshTokenGeneratorInterface;
+use Gesdinet\JWTRefreshTokenBundle\Model\RefreshTokenManagerInterface;
 use JMS\Serializer\Serializer;
 use JsonException;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,28 +23,55 @@ class UserApiTest extends AbstractTest
 
     private string $currentApiUrl = '/api/v1/users/current';
 
+    private array $adminCredentials = [
+        'username' => 'admin@gmail.com',
+        'password' => 'password',
+    ];
+
+    private array $userCredentials = [
+        'username' => 'user@gmail.com',
+        'password' => 'password',
+    ];
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->serializer = self::$kernel->getContainer()->get('jms_serializer');
     }
 
+    /**
+     * @throws \Exception
+     */
     protected function getFixtures(): array
     {
-        return [new AppFixtures(
-            self::getContainer()->get(UserPasswordHasherInterface::class),
-        )];
+        $userPassHasher = self::getContainer()->get(UserPasswordHasherInterface::class);
+        $paymentService = self::getContainer()->get(PaymentService::class);
+        return [new UserFixtures($userPassHasher, $paymentService)];
     }
-
     /**
      * @throws JsonException
      */
     public function testAuthorizationWithValidCredentials(): void
     {
-        $user = [
-            'username' => 'user@gmail.com',
-            'password' => 'password',
-        ];
+        $client = self::getClient();
+        $client->request(
+            'POST',
+            $this->authApiUrl,
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            $this->serializer->serialize($this->userCredentials, 'json')
+        );
+
+        $this->assertResponseCode(Response::HTTP_OK, $client->getResponse());
+        self::assertTrue($client->getResponse()->headers->contains(
+            'Content-Type',
+            'application/json'
+        ));
+        $data = json_decode($client->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
+
+        self::assertNotEmpty($data['token']);
+        self::assertNotEmpty($data['refresh_token']);
 
         $client = self::getClient();
         $client->request(
@@ -47,19 +80,18 @@ class UserApiTest extends AbstractTest
             [],
             [],
             ['CONTENT_TYPE' => 'application/json'],
-            $this->serializer->serialize($user, 'json')
+            $this->serializer->serialize($this->adminCredentials, 'json')
         );
 
         $this->assertResponseCode(Response::HTTP_OK, $client->getResponse());
-
         self::assertTrue($client->getResponse()->headers->contains(
             'Content-Type',
             'application/json'
         ));
-
         $data = json_decode($client->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
 
         self::assertNotEmpty($data['token']);
+        self::assertNotEmpty($data['refresh_token']);
     }
 
     /**
@@ -125,6 +157,7 @@ class UserApiTest extends AbstractTest
         $data = json_decode($client->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
 
         self::assertNotEmpty($data['token']);
+        self::assertNotEmpty($data['refresh_token']);
         self::assertNotEmpty($data['roles']);
 
 
@@ -151,16 +184,16 @@ class UserApiTest extends AbstractTest
             $this->serializer->serialize($user, 'json')
         );
 
-        $this->assertResponseCode(Response::HTTP_BAD_REQUEST, $client->getResponse());
+        $this->assertResponseCode(Response::HTTP_UNAUTHORIZED, $client->getResponse());
 
         $errors = json_decode($client->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
 
-        self::assertNotEmpty($errors['error']);
-        self::assertNotEmpty($errors['error']['username']);
-        self::assertNotEmpty($errors['error']['password']);
+        self::assertNotEmpty($errors['errors']);
+        self::assertNotEmpty($errors['errors']['username']);
+        self::assertNotEmpty($errors['errors']['password']);
 
-        self::assertEquals('Email заполнен не по формату |почтовыйАдрес@почтовыйДомен.домен| .', $errors['error']['username']);
-        self::assertEquals('Пароль должен содержать минимум 6 символов.', $errors['error']['password']);
+        self::assertEquals('Email заполнен не по формату |почтовыйАдрес@почтовыйДомен.домен| .', $errors['errors']['username']);
+        self::assertEquals('Пароль должен содержать минимум 6 символов.', $errors['errors']['password']);
     }
 
     /**
@@ -183,16 +216,16 @@ class UserApiTest extends AbstractTest
             $this->serializer->serialize($user, 'json')
         );
 
-        $this->assertResponseCode(Response::HTTP_BAD_REQUEST, $client->getResponse());
+        $this->assertResponseCode(Response::HTTP_UNAUTHORIZED, $client->getResponse());
 
         $errors = json_decode($client->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
 
-        self::assertNotEmpty($errors['error']);
-        self::assertNotEmpty($errors['error']['username']);
-        self::assertNotEmpty($errors['error']['password']);
+        self::assertNotEmpty($errors['errors']);
+        self::assertNotEmpty($errors['errors']['username']);
+        self::assertNotEmpty($errors['errors']['password']);
 
-        self::assertEquals('Email пуст!', $errors['error']['username']);
-        self::assertEquals('Пароль должен содержать минимум 6 символов.', $errors['error']['password']);
+        self::assertEquals('Email пуст!', $errors['errors']['username']);
+        self::assertEquals('Пароль должен содержать минимум 6 символов.', $errors['errors']['password']);
     }
 
     /**
@@ -200,11 +233,6 @@ class UserApiTest extends AbstractTest
      */
     public function testRegisterWithAlreadyUsedEmail(): void
     {
-        $user = [
-            'username' => 'user@gmail.com',
-            'password' => 'password',
-        ];
-
         $client = self::getClient();
         $client->request(
             'POST',
@@ -212,16 +240,12 @@ class UserApiTest extends AbstractTest
             [],
             [],
             ['CONTENT_TYPE' => 'application/json'],
-            $this->serializer->serialize($user, 'json')
+            $this->serializer->serialize($this->userCredentials, 'json')
         );
 
-        $this->assertResponseCode(Response::HTTP_CONFLICT, $client->getResponse());
-
+        $this->assertResponseCode(Response::HTTP_UNAUTHORIZED, $client->getResponse());
         $errors = json_decode($client->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
-
-        self::assertNotEmpty($errors['error']);
-
-        self::assertEquals('Email уже используется.', $errors['error']);
+        self::assertEquals('Пользователь с такой электронной почтой уже существует!', $errors['errors']['unique']);
     }
 
     /**
@@ -249,12 +273,7 @@ class UserApiTest extends AbstractTest
 
     public function testGetCurrentUserIsSuccessful(): void
     {
-        $user = [
-            'username' => 'user@gmail.com',
-            'password' => 'password',
-        ];
-
-        $token = $this->getToken($user);
+        $token = $this->getToken($this->userCredentials);
 
         $client = self::getClient();
         $client->request(
@@ -303,5 +322,4 @@ class UserApiTest extends AbstractTest
 
         $this->assertResponseCode(Response::HTTP_UNAUTHORIZED, $client->getResponse());
     }
-
 }
